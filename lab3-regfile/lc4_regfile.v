@@ -1,5 +1,5 @@
-/* TODO: Names of all group members
- * TODO: PennKeys of all group members
+/* Albert Wang & Tahmid Ahamed
+ * albertwa & ahamedt
  *
  * lc4_regfile.v
  * Implements an 8-register register file parameterized on word size.

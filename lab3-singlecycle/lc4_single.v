@@ -1,4 +1,4 @@
-/* TODO: name and PennKeys of all group members here
+/* Albert Wang (albertwa) & Tahmid Ahamed (ahamedt) */
  *
  * lc4_single.v
  * Implements a single-cycle data path

@@ -1,4 +1,4 @@
-/* Albert Wang (albertwa) & Tahmid Ahamed (ahamedt) */
+/* Albert Wang (albertwa) & Tahmid Ahamed (ahamedt)
  *
  * lc4_single.v
  * Implements a single-cycle data path
@@ -63,12 +63,91 @@ module lc4_processor
 
    /* END DO NOT MODIFY THIS CODE */
 
+   wire [15:0] pcPlusOne;
+   cla16 make_pc_plus_one(.a(pc), .b(16'b1), .cin(1'b0), .sum(pcPlusOne));
+   
+   wire [2:0] r1sel;
+   wire [2:0] r2sel;
+   wire [2:0] rd_sel;
+   wire r1re;
+   wire r2re;
+   wire regfile_we;
+   wire nzp_we;
+   wire select_pc_plus_one;
+   wire is_load;
+   wire is_store;
+   wire is_branch;
+   wire is_control_insn;
+   lc4_decoder decoder(.insn(i_cur_insn),
+                       .r1sel(r1sel),
+                       .r1re(r1re),
+                       .r2sel(r2sel),
+                       .r2re(r2re),
+                       .wsel(rd_sel),
+                       .regfile_we(regfile_we),
+                       .nzp_we(nzp_we),
+                       .select_pc_plus_one(select_pc_plus_one),
+                       .is_load(is_load),
+                       .is_store(is_store),
+                       .is_branch(is_branch),
+                       .is_control_insn(is_control_insn));
 
-   /*******************************
-    * TODO: INSERT YOUR CODE HERE *
-    *******************************/
+   wire [2:0] nzpIn = alu_output[15] == 1'b1 ? 3'b100 :
+                      alu_output == 16'd0 ? 3'b010 :
+                      3'b001;
+   wire [2:0] nzpOut;
+   Nbit_reg #(3, 3'b000) nzp_reg(.in(nzpIn),
+                                 .out(nzpOut),
+                                 .clk(clk),
+                                 .we(nzp_we),
+                                 .gwe(gwe),
+                                 .rst(rst));
+                                 
+   wire [15:0] rsData;
+   wire [15:0] rtData;
+   wire [15:0] writeRegData;
+   lc4_regfile #(.n(16)) regfile 
+         (.clk(clk),
+          .gwe(gwe),
+          .rst(rst), 
+          .i_rs(r1sel),
+          .o_rs_data(rsData),
+          .i_rt(r2sel),
+          .o_rt_data(rtData), 
+          .i_rd(rd_sel),
+          .i_wdata(writeRegData),
+         .i_rd_we(regfile_we));
 
+   wire [15:0] alu_output;
+   lc4_alu alu 
+      (.i_insn(i_cur_insn),
+       .i_pc(pc),
+       .i_r1data(rsData),
+       .i_r2data(rtData),
+       .o_result(alu_output));
+   
 
+   assign o_dmem_we = is_store;
+   assign o_dmem_towrite = rtData;
+   assign o_dmem_addr = alu_output;
+   assign writeRegData = select_pc_plus_one ? pcPlusOne : (is_load ? i_cur_dmem_data : alu_output);
+   assign next_pc = is_control_insn || (is_branch && (nzpOut & i_cur_insn[11:9])) ? (is_load ? i_cur_dmem_data : alu_output) : pcPlusOne;
+   assign o_cur_pc = pc;
+   assign test_stall =  1'b0;
+   assign test_cur_pc = pc;
+   assign test_cur_insn = i_cur_insn;
+   assign test_regfile_we = regfile_we;
+   assign test_regfile_wsel = rd_sel;
+   assign test_regfile_data = writeRegData;
+   assign test_nzp_we = nzp_we;
+   assign test_nzp_new_bits = nzpIn;
+   assign test_dmem_we = o_dmem_we;
+   assign test_dmem_addr = is_load ? o_dmem_addr :
+                           is_store ? o_dmem_addr :
+                           16'b0;
+   assign test_dmem_data = is_load ? i_cur_dmem_data :
+                           is_store ? o_dmem_towrite :
+                           16'b0;
 
    /* Add $display(...) calls in the always block below to
     * print out debug information at the end of every cycle.

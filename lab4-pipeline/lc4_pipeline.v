@@ -1,4 +1,4 @@
-/* TODO: name and PennKeys of all group members here */
+/* Albert Wang (albertwa) & Tahmid Ahamed (ahamedt) */
 
 `timescale 1ns / 1ps
 
@@ -32,6 +32,8 @@ module lc4_processor
     input wire [7:0]   switch_data, // Current settings of the Zedboard switches
     output wire [7:0]  led_data // Which Zedboard LEDs should be turned on?
     );
+
+   
    
    /*** YOUR CODE HERE ***/
 

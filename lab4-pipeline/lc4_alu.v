@@ -1,8 +1,7 @@
-/* Albert Wang (albertwa) & Tahmid Ahamed (ahamedt) */
+/* Tahmid Ahamed (ahamedt) and Albert Wang (albertwa) */
 
 `timescale 1ns / 1ps
 `default_nettype none
-
 module lc4_alu(input  wire [15:0] i_insn,
                input wire [15:0]  i_pc,
                input wire [15:0]  i_r1data,
@@ -85,4 +84,25 @@ module lc4_alu(input  wire [15:0] i_insn,
                           (i_insn[15:12] == 4'b1111) ? trap :          
                           claFinal;
         
+<<<<<<< HEAD
 endmodule
+=======
+endmodule
+
+
+// module lc4_alu(input  wire [15:0] i_insn,
+//                input wire [15:0]  i_pc,
+//                input wire [15:0]  i_r1data,
+//                input wire [15:0]  i_r2data,
+//                output wire [15:0] o_result);
+
+
+//       /*** YOUR CODE HERE ***/
+
+// endmodule
+
+// /* Albert Wang (albertwa) & Tahmid Ahamed (ahamedt) */
+
+// `timescale 1ns / 1ps
+// `default_nettype none
+>>>>>>> 213bed0 (lab4b)

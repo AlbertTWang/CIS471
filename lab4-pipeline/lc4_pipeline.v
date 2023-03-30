@@ -46,6 +46,91 @@ module lc4_processor
     * You do not need to resynthesize and re-implement if this is all you change;
     * just restart the simulation.
     */
+
+
+    //F Stage
+    assign led_data = switch_data;
+    wire [15:0]   PC;
+    wire [15:0]   next_pc;
+    wire [15:0]   pcplusOne;
+
+    cla16 add_one_to_pc(.a(PC), .b(16'b1), .cin(1'b0), .sum(pcplusOne));
+    Nbit_reg #(16, 16'h8200) pc_reg_fetch_stage (.in(next_pc), .out(PC), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
+
+
+
+    //D Stage
+    wire [15:0]   decode_PC;
+    Nbit_reg #(16, 16'h8200) pc_reg_decode_stage (.in(PC), .out(decode_PC), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
+
+    wire [15:0]   decode_stage_instruction_output;
+    Nbit_reg #(16, 16'd0) instruction_reg_decode_stage (.in(i_cur_insn), .out(decode_stage_instruction_output), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
+
+    wire r1re;
+    wire r2re;
+    wire regfile_we;
+    wire nzp_we;
+    wire plus_one_select;
+    wire is_load;
+    wire is_store;
+    wire is_branch;
+    wire is_control_insn;
+
+    wire [2:0]    r1_select;
+    wire [2:0]    r2_select;
+    wire [2:0]    rd_select;
+
+    wire [15:0]   rsData;
+    wire [15:0]   rtData;
+    wire [15:0]   writeRegData;
+
+    lc4_regfile decoder_regfile (
+      .clk(clk),
+      .gwe(gwe),
+      .rst(rst),
+      .i_rs(r1_select),
+      .o_rs_data(rsData)
+      .i_rt(r2_select),
+      .o_rt_data(rtData),
+      .i_rd(rd_select),
+      .i_wdata(writeRegData),
+      .i_rd_we(regfile_we)
+    );
+
+    lc4_decoder #(16) decoder(.insn(decode_stage_instruction_output), 
+    .r1sel(r1_select), 
+    .r1re(r1re), 
+    .r2sel(r2_select),
+    .wsel(rd_select),
+    .regfile_we(regfile_we),
+    .nzp_we(nzp_we),
+    .select_pc_plus_one(plus_one_select),
+    .is_load(is_load),
+    .is_store(is_store),
+    .is_branch(is_branch),
+    .is_control_insn(is_control_insn)
+    );
+    
+   
+    //X Stage
+    wire [15:0] x_PC;
+    wire [15:0] x_stage_instruction_output;
+    Nbit_reg #(16, 16'h8200) pc_reg_x_stage(.in(decode_PC), .out(x_PC), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
+    Nbit_reg #(16, 16'd0) instruction_reg_execute_stage(.in(decode_stage_instruction_output), .out(x_stage_instruction_output), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
+    Nbit_reg #(16, 16'd0) x_stage_write_data_reg
+    Nbit_reg #(16, 16'd0) x_stage_rt_data_reg;
+    Nbit_reg #(16, 16'd0) x_stage_rs_data_reg;
+
+
+    //M Stage
+
+    //W Stage
+
+
+
+    //Test Wires
+    assign o_cur_pc = PC;
+
 `ifndef NDEBUG
    always @(posedge gwe) begin
       // $display("%d %h %h %h %h %h", $time, f_pc, d_pc, e_pc, m_pc, test_cur_pc);

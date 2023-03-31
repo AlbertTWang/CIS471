@@ -48,92 +48,363 @@ module lc4_processor
     */
 
 
-    //F Stage
-    assign led_data = switch_data;
-    wire [15:0]   PC;
-    wire [15:0]   next_pc;
-    wire [15:0]   pcplusOne;
+   assign led_data = switch_data;
 
-    cla16 add_one_to_pc(.a(PC), .b(16'b1), .cin(1'b0), .sum(pcplusOne));
-    Nbit_reg #(16, 16'h8200) pc_reg_fetch_stage (.in(next_pc), .out(PC), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
+   localparam INIT_PC = 16'h8200;
 
+   // All Wires
+   wire [15:0] pcPlusOne;
+   wire [15:0] pc;
+   wire [15:0] next_pc = branch_taken ? execute_aluout : (stall ? pc : pcPlusOne);
+   wire [15:0] decode_pc;
+   wire [15:0] decode_insn;
+   wire [15:0] decode_pc_plus_one;
+   wire [17:0] decode_out;
+   wire [15:0] decode_r1;
+   wire [15:0] decode_r2;
+   wire [15:0] decode_r1_out;
+   wire [15:0] decode_r2_out;
+   wire [15:0] execute_pc;
+   wire [15:0] execute_insn;
+   wire [17:0] execute_decode;
+   wire [15:0] execute_r1;
+   wire [15:0] execute_r2;
+   wire [15:0] execute_pcPlusOne;
+   wire [15:0] execute_aluout;
+   wire [15:0] memory_pc;
+   wire [15:0] memory_insn;
+   wire [17:0] memory;
+   wire [15:0] memory_r2;
+   wire [15:0] memory_alu;
+   wire [15:0] execute_r1_final;
+   wire [15:0] execute_r2_final;
+   wire [15:0] memory_pcPlusOne;
+   wire [15:0] writeback_pc;
+   wire [15:0] writeback_insn;
+   wire [17:0] writeback;
+   wire [15:0] writeback_rd;
+   wire [15:0] writeback_dmem;
+   wire [15:0] writeback_dmem_write;
+   wire [15:0] writeback_addr;
 
-
-    //D Stage
-    wire [15:0]   decode_PC;
-    Nbit_reg #(16, 16'h8200) pc_reg_decode_stage (.in(PC), .out(decode_PC), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
-
-    wire [15:0]   decode_stage_instruction_output;
-    Nbit_reg #(16, 16'd0) instruction_reg_decode_stage (.in(i_cur_insn), .out(decode_stage_instruction_output), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
-
-    wire r1re;
-    wire r2re;
-    wire regfile_we;
-    wire nzp_we;
-    wire plus_one_select;
-    wire is_load;
-    wire is_store;
-    wire is_branch;
-    wire is_control_insn;
-
-    wire [2:0]    r1_select;
-    wire [2:0]    r2_select;
-    wire [2:0]    rd_select;
-
-    wire [15:0]   rsData;
-    wire [15:0]   rtData;
-    wire [15:0]   writeRegData;
-
-    lc4_regfile decoder_regfile (
-      .clk(clk),
+   // PC register
+   Nbit_reg #(16, INIT_PC) pcReg (
+      .in(next_pc), 
+      .out(pc), 
+      .clk(clk), 
+      .we(1'b1), 
       .gwe(gwe),
-      .rst(rst),
-      .i_rs(r1_select),
-      .o_rs_data(rsData)
-      .i_rt(r2_select),
-      .o_rt_data(rtData),
-      .i_rd(rd_select),
-      .i_wdata(writeRegData),
-      .i_rd_we(regfile_we)
-    );
-
-    lc4_decoder #(16) decoder(.insn(decode_stage_instruction_output), 
-    .r1sel(r1_select), 
-    .r1re(r1re), 
-    .r2sel(r2_select),
-    .wsel(rd_select),
-    .regfile_we(regfile_we),
-    .nzp_we(nzp_we),
-    .select_pc_plus_one(plus_one_select),
-    .is_load(is_load),
-    .is_store(is_store),
-    .is_branch(is_branch),
-    .is_control_insn(is_control_insn)
-    );
-    
+      .rst(rst)
+   );
    
-    //X Stage
-    wire [15:0] x_PC;
-    wire [15:0] x_stage_instruction_output;
-    Nbit_reg #(16, 16'h8200) pc_reg_x_stage(.in(decode_PC), .out(x_PC), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
-    Nbit_reg #(16, 16'd0) instruction_reg_execute_stage(.in(decode_stage_instruction_output), .out(x_stage_instruction_output), .clk(clk), .we(1'b1), .gwe(gwe), .rst(rst));
-    Nbit_reg #(16, 16'd0) x_stage_write_data_reg
-    Nbit_reg #(16, 16'd0) x_stage_rt_data_reg;
-    Nbit_reg #(16, 16'd0) x_stage_rs_data_reg;
+   // PC increment
+   cla16 pcInc (
+      .a(pc), 
+      .b(16'b1), 
+      .cin(1'b0), 
+      .sum(pcPlusOne)
+   );
 
 
-    //M Stage
+   // D-stage instruction register
+   Nbit_reg #(16, 16'd0) decode_insn_pipe (
+      .in(branch_taken ? 16'b0 : i_cur_insn), 
+      .out(decode_insn),
+      .clk(clk),
+      .we(!stall),
+      .gwe(gwe),
+      .rst(rst)
+   );
+   
+   // D-stage PC register
+   Nbit_reg #(16, INIT_PC) decode_pc_pipe (
+      .in(branch_taken ? 16'b0 : pc),
+      .out(decode_pc),
+      .clk(clk),
+      .we(!stall),
+      .gwe(gwe),
+      .rst(rst)
+   );
 
-    //W Stage
+   // D-stage PC+1 register
+   Nbit_reg #(16, 16'd0) decode_pcPlusOne_pipe (
+      .in(branch_taken ? 16'b0 : pcPlusOne),
+      .out(decode_pc_plus_one),
+      .clk(clk),
+      .we(!stall),
+      .gwe(gwe),
+      .rst(rst)
+   );
 
 
+   // Define stall
+   wire stall = (decode_out[16] | (decode_out[7] & !decode_out[15] & decode_out[6:4] == execute_decode[10:8]) | ((decode_out[2:0] == execute_decode[10:8]) & decode_out[3])) & execute_decode[14];
 
-    //Test Wires
-    assign o_cur_pc = PC;
+   // LC4 decoder
+   lc4_decoder decoder (
+      .insn(decode_insn), 
+      .r1sel(decode_out[2:0]),
+      .r1re(decode_out[3]),
+      .r2sel(decode_out[6:4]),
+      .r2re(decode_out[7]),
+      .wsel(decode_out[10:8]),
+      .regfile_we(decode_out[11]), 
+      .nzp_we(decode_out[12]), 
+      .select_pc_plus_one(decode_out[13]),
+      .is_load(decode_out[14]), 
+      .is_store(decode_out[15]), 
+      .is_branch(decode_out[16]), 
+      .is_control_insn(decode_out[17])
+   );
+
+   // LC4 register file
+   lc4_regfile#(16) regfile (
+      .clk(clk), 
+      .gwe(gwe), 
+      .rst(rst), 
+      .i_rs(decode_out[2:0]), 
+      .o_rs_data(decode_r1), 
+      .i_rt(decode_out[6:4]), 
+      .o_rt_data(decode_r2), 
+      .i_rd(writeback[10:8]), 
+      .i_wdata(writeback_rd), 
+      .i_rd_we(writeback[11])
+   );
+
+   // D-Stage Register values
+   assign decode_r1_out = (writeback[10:8] == decode_out[2:0] & writeback[11] & decode_out[3]) ? writeback_rd : decode_r1;
+   assign decode_r2_out = (writeback[10:8] == decode_out[6:4] & writeback[11] & decode_out[7]) ? writeback_rd : decode_r2;
+
+   // X-stage registers
+   Nbit_reg #(16, 16'd0) execute_insn_pipe (
+      .in(branch_taken ? 16'b0 : (stall ? 16'b1 : decode_insn)), 
+      .out(execute_insn), 
+      .clk(clk), 
+      .we(1'b1), 
+      .gwe(gwe),
+      .rst(rst)
+   );
+   
+   Nbit_reg #(16, INIT_PC) execute_pc_pipe (
+      .in((stall | branch_taken) ? 16'b0 : decode_pc), 
+      .out(execute_pc), 
+      .clk(clk), 
+      .we(1'b1), 
+      .gwe(gwe),
+      .rst(rst)
+   );
+
+   Nbit_reg #(16, 16'd0) execute_pcPlusOne_pipe (
+      .in((branch_taken | stall) ? 16'b0 : decode_pc_plus_one), 
+      .out(execute_pcPlusOne), 
+      .clk(clk), 
+      .we(1'b1), 
+      .gwe(gwe), 
+      .rst(rst)
+   );
+
+   Nbit_reg #(16, 16'd0) execute_r1_pipe (
+      .in((branch_taken | stall) ? 16'b0 : decode_r1_out), 
+      .out(execute_r1 ), 
+      .clk(clk), 
+      .we(1'b1), 
+      .gwe(gwe), 
+      .rst(rst)
+   );
+
+   Nbit_reg #(16, 16'd0) execute_r2_pipe (
+      .in((branch_taken | stall) ? 16'b0 : decode_r2_out), 
+      .out(execute_r2), 
+      .clk(clk), 
+      .we(1'b1), 
+      .gwe(gwe), 
+      .rst(rst)
+   );
+
+   Nbit_reg #(18, 18'd0) execute_decode_pipe (
+      .in((branch_taken | stall) ? 18'b0 : decode_out), 
+      .out(execute_decode), 
+      .clk(clk), 
+      .we(1'b1), 
+      .gwe(gwe), 
+      .rst(rst)
+   );
+
+   // X-stage register values
+   assign execute_r1_final = (memory[10:8] == execute_decode[2:0] & !memory[14] & memory[11] & execute_decode[3]) ? memory_alu : ((writeback[10:8] == execute_decode[2:0] & writeback[11] & execute_decode[3]) ? writeback_rd : execute_r1 );
+   assign execute_r2_final = (memory[10:8] == execute_decode[6:4] & !memory[14] & memory[11] & execute_decode[7]) ? memory_alu : ((writeback[10:8] == execute_decode[6:4] & writeback[11] & execute_decode[7]) ? writeback_rd : execute_r2);
+
+   // ALU
+   lc4_alu alu(
+      .i_insn(execute_insn), 
+      .i_pc(execute_pc), 
+      .i_r1data(execute_r1_final), 
+      .i_r2data(execute_r2_final ), 
+      .o_result(execute_aluout)
+   );
+
+   // Branch Taken Wire
+   wire branch_taken;
+   assign branch_taken = execute_decode[17] | (execute_decode[16] & ((execute_insn[11:9] & (memory[12] ? nzp: nzp_memory)) != 3'b0));
+
+   // M-stage registers
+   Nbit_reg #(16, 16'd0) memory_insn_pipe (
+      .in(execute_insn), 
+      .out(memory_insn), 
+      .clk(clk), 
+      .we(1'b1), 
+      .gwe(gwe), 
+      .rst(rst)
+   );
+   
+   Nbit_reg #(16, 16'h8200) memory_pc_pipe (
+      .in(execute_pc), 
+      .out(memory_pc), 
+      .clk(clk), 
+      .we(1'b1), 
+      .gwe(gwe), 
+      .rst(rst)
+   );
+
+   Nbit_reg #(16, 16'd0) memory_pcPlusOne_pipe (
+      .in(execute_pcPlusOne),
+      .out(memory_pcPlusOne),
+      .clk(clk),
+      .we(1'b1),
+      .gwe(gwe),
+      .rst(rst)
+   );
+   
+   Nbit_reg #(16, 16'd0) memory_r2_pipe (
+      .in(execute_r2_final ), 
+      .out(memory_r2), 
+      .clk(clk), 
+      .we(1'b1), 
+      .gwe(gwe),
+      .rst(rst)
+   );
+
+   Nbit_reg #(18, 18'd0) memory_decode_pipe (
+      .in(execute_decode), 
+      .out(memory), 
+      .clk(clk), 
+      .we(1'b1), 
+      .gwe(gwe), 
+      .rst(rst)
+   );
+
+   Nbit_reg #(16, 16'd0) memory_alu_pipe (
+      .in(execute_aluout),
+      .out(memory_alu),
+      .clk(clk),
+      .we(1'b1),
+      .gwe(gwe),
+      .rst(rst)
+   );
+
+   // NZP register & calculations
+   wire[2:0] nzp;
+   assign nzp[0] = $signed(memory_rd) > 0;
+   assign nzp[1] = $signed(memory_rd) == 0;
+   assign nzp[2] = $signed(memory_rd) < 0;
+
+   wire[15:0] memory_rd = memory[13] ? memory_pcPlusOne : (memory[14] ? i_cur_dmem_data : memory_alu);
+   
+   wire[2:0] nzp_memory;
+   Nbit_reg #(3, 3'd0) nzp_pipe (
+      .in(nzp),
+      .out(nzp_memory),
+      .clk(clk),
+      .we(memory[12]),
+      .gwe(gwe),
+      .rst(rst)
+   );
+   
+
+   // W-stage registers
+   Nbit_reg #(16, 16'd0) writeback_insn_pipe (
+      .in(memory_insn), 
+      .out(writeback_insn), 
+      .clk(clk), 
+      .we(1'b1), 
+      .gwe(gwe), 
+      .rst(rst)
+   );
+
+   Nbit_reg #(16, 16'h8200) writeback_pc_pipe (
+      .in(memory_pc), 
+      .out(writeback_pc), 
+      .clk(clk), 
+      .we(1'b1), 
+      .gwe(gwe), 
+      .rst(rst)
+   );
+
+   Nbit_reg #(18, 18'd0) writeback_pipe (
+      .in(memory), 
+      .out(writeback), 
+      .clk(clk), 
+      .we(1'b1), 
+      .gwe(gwe), 
+      .rst(rst)
+   );
+
+   Nbit_reg #(16, 16'd0) writeback_rd_pipe (
+      .in(memory_rd), 
+      .out(writeback_rd), 
+      .clk(clk), 
+      .we(1'b1), 
+      .gwe(gwe), 
+      .rst(rst)
+   );
+
+   Nbit_reg #(16, 16'd0) writeback_dmem_pipe (
+      .in(i_cur_dmem_data), 
+      .out(writeback_dmem), 
+      .clk(clk), 
+      .we(1'b1), 
+      .gwe(gwe), 
+      .rst(rst)
+   );
+
+   Nbit_reg #(16, 16'd0) writeback_dmem_write_pipe (
+      .in(o_dmem_towrite), 
+      .out(writeback_dmem_write), 
+      .clk(clk), 
+      .we(1'b1), 
+      .gwe(gwe), 
+      .rst(rst)
+   );
+
+   Nbit_reg #(16, 16'd0) writeback_addr_pipe (
+      .in(o_dmem_addr), 
+      .out(writeback_addr), 
+      .clk(clk), 
+      .we(1'b1), 
+      .gwe(gwe), 
+      .rst(rst)
+   );
+
+   // Test signals
+   assign o_cur_pc = pc;
+   assign test_stall = (writeback_insn == 16'b0) ? 2'b10 : (writeback_insn == 16'b1 ? 2'b11 : 2'b00);
+   assign test_cur_pc = writeback_pc;
+   assign test_cur_insn = writeback_insn;
+   assign test_regfile_we = writeback[11];
+   assign test_regfile_wsel = writeback[10:8];
+   assign test_regfile_data = writeback_rd;
+   assign test_nzp_we = writeback[12];
+   assign test_nzp_new_bits = nzp_memory;
+   assign test_dmem_we = writeback[15];
+   assign test_dmem_addr = writeback_addr;
+   assign test_dmem_data = writeback[14] ? writeback_dmem : (writeback[15] ? writeback_dmem_write : 16'b0);
+   assign o_dmem_addr = (memory[14] | memory[15]) ? memory_alu : 16'b0;
+   assign o_dmem_we = memory[15];
+   assign o_dmem_towrite = (memory[15] & writeback[11] & memory[6:4] == writeback[10:8]) ? writeback_rd : memory_r2;
 
 `ifndef NDEBUG
    always @(posedge gwe) begin
-      // $display("%d %h %h %h %h %h", $time, f_pc, d_pc, e_pc, m_pc, test_cur_pc);
+      // $display("%d %h %h %h %h %h", $time, f_pc, decode_pc, e_pc, memory_pc, test_cur_pc);
       // if (o_dmem_we)
       //   $display("%d STORE %h <= %h", $time, o_dmem_addr, o_dmem_towrite);
 

@@ -39,6 +39,7 @@ module lc4_regfile_ss #(parameter n = 16)
     input  wire          i_rd_we_B   // pipe B: write enable
     );
 
+
    /*** TODO: Your Code Here ***/
 
 endmodule
